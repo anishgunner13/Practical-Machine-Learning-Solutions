@@ -1,0 +1,100 @@
+---
+title: "Practical Machine Learning Peer Assessment: Prediction Assignment"
+date: "December 2014"
+output: 
+  html_document:
+    keep_md: true
+---
+```{r echo=FALSE}
+#knitr::opts_chunk$set(echo=TRUE) 
+```
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+```{r packages, include=FALSE, cache=FALSE, echo=FALSE, results=FALSE, warning=FALSE, comment=FALSE}
+library(Hmisc)
+library(caret)
+library(randomForest)
+options(warn=-1)
+```
+
+```{r DownloadData, include=FALSE, cache=FALSE, echo=FALSE, results=FALSE, warning=FALSE, comment=FALSE}
+setwd("C:\\Users\\xiaoqun\\DataScienceSpecialization\\PracticalMachineLearning")
+
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")
+#download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv")
+```
+
+## Data Cleaning
+First we need to get rid of the variables that have close to zero variance in both training and testing data. Then remove the columns with missing values to avoid issues in training models. If the result is not good, we can add back those columns with missing values imputed.
+```{r DataClean}
+#replaced "#DIV/0!"with an NA value 
+training_data <- read.csv("pml-training.csv", na.strings=c("#DIV/0!") )
+evaluation_data <- read.csv("pml-testing.csv", na.strings=c("#DIV/0!") )
+
+#casted all columns 8 to the end to be numeric. 
+for(i in c(8:ncol(training_data)-1)) {training_data[,i] = as.numeric(as.character(training_data[,i]))} 
+for(i in c(8:ncol(evaluation_data)-1)) {evaluation_data[,i] = as.numeric(as.character(evaluation_data[,i]))}
+
+#remove columns were mostly blank or unrlevant such as user name, timestamps and windows 
+feature_set <- colnames(training_data[colSums(is.na(training_data)) == 0])[-(1:7)]
+model_data <- training_data[feature_set]
+feature_set
+
+#We now have the model data built from our feature set. 
+idx <- createDataPartition(y=model_data$classe, p=0.75, list=FALSE )
+training <- model_data[idx,]
+testing <- model_data[-idx,]
+```
+
+## Build Random Forest Model
+Lets fit a random forest and see how well it performs
+
+```{r}
+set.seed(2048)
+
+rfFit=randomForest(classe~.,data=training,ntree=100, importance=TRUE)
+rfFit
+```
+
+Provide error reports for both training and test data.
+```{r}
+predictions1 <- predict(rfFit, newdata=training)
+confusionMatrix(predictions1,training$classe)
+
+
+predictions2 <- predict(rfFit, newdata=testing)
+confusionMatrix(predictions2,testing$classe)
+
+plot(rfFit, log="y")
+varImpPlot(rfFit,)
+```
+
+## Conclusions 
+
+The confusion matrix shows that the model is very accurate.  I did experiment with cross validation, PCA and other models, but did not get as good of accuracy. Because my test data was around 99% 
+accurate I expected nearly all of the submitted test cases to be correct.  It turned out they 
+were all correct.
+
+## Test Data Submit
+Prepare the submission using COURSERA provided code as follows:
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+
+x <- evaluation_data
+x <- x[feature_set[feature_set!='classe']]
+answers <- predict(rfFit, newdata=x)
+
+answers
+
+pml_write_files(answers)
+```
